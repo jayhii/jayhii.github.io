@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
-  <title>LangGraph Node Editor - Improved</title>
+  <title>LangGraph 노드 에디터</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
   <!-- 외부 라이브러리 -->
@@ -24,14 +24,105 @@
     html, body { 
       margin: 0; 
       padding: 0; 
-      height: 100%; 
-      overflow: hidden; 
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     }
     
-    .container { 
+    .main-container {
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+    
+    /* 헤더 스타일 */
+    header {
+      background-color: var(--primary-color);
+      color: white;
+      padding: 0.8rem 0;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+      z-index: 100;
+    }
+    
+    .header-container {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 0 2rem;
+    }
+    
+    .logo {
+      font-size: 1.5rem;
+      font-weight: bold;
+      text-decoration: none;
+      color: white;
+      display: flex;
+      align-items: center;
+    }
+    
+    .logo-icon {
+      margin-right: 10px;
+      font-size: 1.8rem;
+    }
+    
+    .page-title {
+      font-size: 1.4rem;
+      font-weight: 500;
+    }
+    
+    .nav-buttons {
+      display: flex;
+      gap: 1rem;
+      align-items: center;
+    }
+    
+    .nav-button {
+      background-color: rgba(255, 255, 255, 0.2);
+      color: white;
+      border: none;
+      border-radius: 4px;
+      padding: 0.5rem 1rem;
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: background-color 0.3s;
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+    }
+    
+    .nav-button:hover {
+      background-color: rgba(255, 255, 255, 0.3);
+    }
+    
+    .nav-button i {
+      margin-right: 5px;
+    }
+    
+    .user-profile {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      color: white;
+      font-size: 0.9rem;
+    }
+    
+    .user-avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background-color: #fff;
+      color: var(--primary-color);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+    }
+    
+    /* 워크스페이스 컨테이너 */
+    .workspace-container { 
       display: flex; 
-      height: 100vh; 
+      flex: 1;
+      height: calc(100vh - 128px); /* 헤더와 푸터 높이 제외 */
       width: 100vw; 
     }
     
@@ -390,66 +481,180 @@
       to { opacity: 1; transform: translateY(0); }
     }
 
+    /* 푸터 스타일 */
+    footer {
+      background-color: #333;
+      color: white;
+      padding: 1rem 0;
+      font-size: 0.9rem;
+    }
+    
+    .footer-container {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 0 2rem;
+    }
+    
+    .footer-links {
+      display: flex;
+      gap: 1.5rem;
+    }
+    
+    .footer-links a {
+      color: #bbb;
+      text-decoration: none;
+      transition: color 0.3s;
+    }
+    
+    .footer-links a:hover {
+      color: white;
+    }
+
+    /* 반응형 디자인 */
+    @media (max-width: 1200px) {
+      .workspace-container {
+        flex-direction: column;
+        height: auto;
+      }
+      
+      .sidebar {
+        width: 100%;
+        border-right: none;
+        border-bottom: 1px solid var(--border-color);
+      }
+      
+      .code-viewer {
+        width: 100%;
+        border-left: none;
+        border-top: 1px solid var(--border-color);
+      }
+    }
+    
+    @media (max-width: 768px) {
+      .header-container {
+        flex-wrap: wrap;
+        gap: 0.5rem;
+      }
+      
+      .page-title {
+        font-size: 1.2rem;
+        flex-basis: 100%;
+        text-align: center;
+        margin: 0.5rem 0;
+      }
+      
+      .footer-container {
+        flex-direction: column;
+        gap: 1rem;
+        text-align: center;
+      }
+    }
   </style>
 </head>
 
 <body>
-<div class="container">
-  
-  <!-- 사이드바 -->
-  <div class="sidebar">
-    <h3>LangGraph 블록</h3>
-    <div id="nodeButtons">
-      <button data-type="Start" title="그래프 시작점">Start</button>
-      <button data-type="End" title="그래프 종료점">End</button>
-      <button data-type="LLM" title="언어 모델 호출">LLM</button>
-      <button data-type="Tool" title="외부 도구 호출">Tool</button>
-      <button data-type="Condition" title="조건 분기">Condition</button>
-      <button data-type="Output" title="결과 출력">Output</button>
-      <button data-type="Custom" title="사용자 정의 코드">Custom</button>
+<div class="main-container">
+  <!-- 헤더 -->
+  <header>
+    <div class="header-container">
+      <a href="index.html" class="logo">
+        <span class="logo-icon">🔄</span>
+        LangGraph
+      </a>
+      
+      <div class="page-title">노드 에디터</div>
+      
+      <div class="nav-buttons">
+        <a href="index.html" class="nav-button">
+          <i>←</i> 메인으로
+        </a>
+        <a href="#" class="nav-button" id="saveWorkflowBtn">
+          <i>💾</i> 저장
+        </a>
+        <div class="user-profile">
+          <div class="user-avatar">G</div>
+          <span>Guest</span>
+        </div>
+      </div>
     </div>
-    
-    <div class="sidebar-actions" style="margin-top: 20px;">
-      <button id="clearButton" style="background-color: #f44336; color: white;" title="모든 노드 삭제">
-        Clear All
-      </button>
-      <button id="importButton" style="background-color: #4CAF50; color: white; margin-top: 10px;" title="JSON 파일 가져오기">
-        Import JSON
-      </button>
-      <input type="file" id="importInput" style="display: none;" accept=".json">
-      <button id="helpButton" style="background-color: #2196F3; color: white;" title="도움말 보기">
-        도움말
-      </button>
-    </div>
-  </div>
+  </header>
 
-  <!-- 에디터 -->
-  <div class="editor-container">
-    <div id="drawflow" class="editor-background"></div>
-    
-    <!-- 툴팁 -->
-    <div id="tooltip" class="tooltip"></div>
-  </div>
-
-  <!-- 코드 뷰어 -->
-  <div class="code-viewer">
-    <div id="formPopup" class="code-viewer-edit">
-      <h4>노드 속성</h4>
-      <div id="formFields">
-        <p>편집할 노드를 선택하세요</p>
+  <div class="workspace-container">
+    <!-- 사이드바 -->
+    <div class="sidebar">
+      <h3>LangGraph 블록</h3>
+      <div id="nodeButtons">
+        <button data-type="Start" title="그래프 시작점">Start</button>
+        <button data-type="End" title="그래프 종료점">End</button>
+        <button data-type="LLM" title="언어 모델 호출">LLM</button>
+        <button data-type="Tool" title="외부 도구 호출">Tool</button>
+        <button data-type="Condition" title="조건 분기">Condition</button>
+        <button data-type="Output" title="결과 출력">Output</button>
+        <button data-type="Custom" title="사용자 정의 코드">Custom</button>
+      </div>
+      
+      <div class="sidebar-actions" style="margin-top: 20px;">
+        <button id="clearButton" style="background-color: #f44336; color: white;" title="모든 노드 삭제">
+          Clear All
+        </button>
+        <button id="importButton" style="background-color: #4CAF50; color: white; margin-top: 10px;" title="JSON 파일 가져오기">
+          Import JSON
+        </button>
+        <input type="file" id="importInput" style="display: none;" accept=".json">
+        <button id="helpButton" style="background-color: #2196F3; color: white;" title="도움말 보기">
+          도움말
+        </button>
       </div>
     </div>
 
-    <div class="code-viewer-content">
-      <h3>생성된 Python 코드</h3>
-      <pre id="codeOutput" class="language-python"># 블록을 추가해보세요</pre>
-      <div class="code-viewer-actions">
-        <button onclick="exportJson()">JSON 저장</button>
-        <button onclick="copyCode()" class="secondary">코드 복사</button>
-        <button onclick="previewExecution()" class="primary" style="background-color: #9C27B0;">실행 미리보기</button>
+    <!-- 에디터 -->
+    <div class="editor-container">
+      <div id="drawflow" class="editor-background"></div>
+      
+      <!-- 툴팁 -->
+      <div id="tooltip" class="tooltip"></div>
+    </div>
+
+    <!-- 코드 뷰어 -->
+    <div class="code-viewer">
+      <div id="formPopup" class="code-viewer-edit">
+        <h4>노드 속성</h4>
+        <div id="formFields">
+          <p>편집할 노드를 선택하세요</p>
+        </div>
+      </div>
+
+      <div class="code-viewer-content">
+        <h3>생성된 Python 코드</h3>
+        <pre id="codeOutput" class="language-python"># 블록을 추가해보세요</pre>
+        <div class="code-viewer-actions">
+          <button onclick="exportJson()">JSON 저장</button>
+          <button onclick="copyCode()" class="secondary">코드 복사</button>
+          <button onclick="previewExecution()" class="primary" style="background-color: #9C27B0;">실행 미리보기</button>
+        </div>
       </div>
     </div>
   </div>
+
+  <!-- 푸터 -->
+  <footer>
+    <div class="footer-container">
+      <div class="copyright">
+        &copy; 2025 LangGraph. All rights reserved.
+      </div>
+      <div class="footer-links">
+        <a href="index.html">홈</a>
+        <a href="#">문서</a>
+        <a href="#">튜토리얼</a>
+        <a href="#">API 참조</a>
+        <a href="#">커뮤니티</a>
+        <a href="#">피드백</a>
+      </div>
+    </div>
+  </footer>
 </div>
 
 <!-- 모달 -->
