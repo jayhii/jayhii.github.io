@@ -369,6 +369,27 @@
       0% { transform: rotate(0deg); }
       100% { transform: rotate(360deg); }
     }
+
+    .connection.condition-connection .main-path {
+      stroke: var(--branch-color, var(--secondary-color));
+      stroke-dasharray: 5, 5;
+    }
+
+    .connection.condition-connection:hover .main-path {
+      stroke: var(--branch-color, var(--secondary-dark));
+      stroke-width: 4px;
+    }
+
+    .branch-item {
+      margin-bottom: 8px;
+      animation: fadeIn 0.3s;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
   </style>
 </head>
 
@@ -391,6 +412,13 @@
     <div class="sidebar-actions" style="margin-top: 20px;">
       <button id="clearButton" style="background-color: #f44336; color: white;" title="모든 노드 삭제">
         Clear All
+      </button>
+      <button id="importButton" style="background-color: #4CAF50; color: white; margin-top: 10px;" title="JSON 파일 가져오기">
+        Import JSON
+      </button>
+      <input type="file" id="importInput" style="display: none;" accept=".json">
+      <button id="helpButton" style="background-color: #2196F3; color: white;" title="도움말 보기">
+        도움말
       </button>
     </div>
   </div>
@@ -418,6 +446,7 @@
       <div class="code-viewer-actions">
         <button onclick="exportJson()">JSON 저장</button>
         <button onclick="copyCode()" class="secondary">코드 복사</button>
+        <button onclick="previewExecution()" class="primary" style="background-color: #9C27B0;">실행 미리보기</button>
       </div>
     </div>
   </div>
@@ -489,7 +518,10 @@ const LangGraph = {
     Condition: { 
       label: 'Condition',
       html: '<div class="title-box">Condition</div><div class="description-box">조건 분기</div>',
-      data: { condition: 'result.success == True' }
+      data: { 
+        condition: 'result.success == True',
+        branches: ['true_branch', 'false_branch'] 
+      }
     },
     Output: { 
       label: 'Output',
@@ -563,6 +595,33 @@ const LangGraph = {
     
     // Clear 버튼 이벤트
     document.getElementById('clearButton').addEventListener('click', this.confirmClearAll.bind(this));
+    // Import 버튼 이벤트
+    document.getElementById('importButton').addEventListener('click', () => {
+      document.getElementById('importInput').click();
+    });
+    document.getElementById('helpButton').addEventListener('click', () => {
+      LangGraph.openHelpModal();
+    });
+    document.getElementById('importInput').addEventListener('change', (e) => {
+      if (e.target.files.length > 0) {
+        const file = e.target.files[0];
+        const reader = new FileReader();
+        
+        reader.onload = (event) => {
+          try {
+            const jsonData = JSON.parse(event.target.result);
+            this.editor.import(jsonData);
+            this.updateCode();
+            this.showToast('JSON 파일을 성공적으로 가져왔습니다', 'success');
+          } catch (error) {
+            console.error('JSON 가져오기 오류:', error);
+            this.showToast('JSON 파일 가져오기에 실패했습니다', 'error');
+          }
+        };
+        
+        reader.readAsText(file);
+      }
+    });
   },
   
   // 키보드 단축키 초기화
@@ -680,6 +739,28 @@ const LangGraph = {
     this.updateConnectionStyle(connection);
     this.updateCode();
     this.showToast('노드가 연결되었습니다', 'info');
+    // 연결 유효성 검사 추가
+    const sourceNode = this.editor.getNodeFromId(connection.output_id);
+    const targetNode = this.editor.getNodeFromId(connection.input_id);
+    
+    // End 노드는 출력 연결을 가질 수 없음
+    if (sourceNode?.name === 'End') {
+      this.editor.removeSingleConnection(connection.output_id, connection.input_id, connection.output_class, connection.input_class);
+      this.showToast('End 노드는 출력 연결을 가질 수 없습니다', 'error');
+      return;
+    }
+    
+    // Start 노드는 입력 연결을 가질 수 없음
+    if (targetNode?.name === 'Start') {
+      this.editor.removeSingleConnection(connection.output_id, connection.input_id, connection.output_class, connection.input_class);
+      this.showToast('Start 노드는 입력 연결을 가질 수 없습니다', 'error');
+      return;
+    }
+    
+    // 연결 스타일 업데이트
+    this.updateConnectionStyle(connection);
+    this.updateCode();
+    this.showToast('노드가 연결되었습니다', 'info');
   },
   
   // 연결 삭제 핸들러
@@ -705,6 +786,18 @@ const LangGraph = {
         connections.forEach(conn => {
           if (sourceNode?.name === 'Condition') {
             conn.classList.add('condition-connection');
+            
+            // 브랜치별 다른 색상 스타일 적용
+            const sourceNodeData = sourceNode.data;
+            const branches = sourceNodeData?.branches || ['true_branch', 'false_branch'];
+            const connectionIndex = Array.from(
+              document.querySelectorAll(`.connection.node_out_${output_id}`)
+            ).indexOf(conn);
+            
+            if (connectionIndex >= 0 && connectionIndex < branches.length) {
+              // 브랜치별 다른 스타일 적용
+              conn.style.setProperty('--branch-color', this.getBranchColor(connectionIndex));
+            }
           }
         });
       }, 100);
@@ -712,7 +805,19 @@ const LangGraph = {
       console.error('연결 스타일 업데이트 오류:', error);
     }
   },
-  
+
+// 브랜치별 색상 반환
+getBranchColor: function(index) {
+  const colors = [
+    '#4CAF50', // 녹색 (true)  
+    '#F44336', // 빨강 (false)
+    '#2196F3', // 파랑
+    '#FF9800', // 주황
+    '#9C27B0', // 보라
+    '#00BCD4'  // 청록
+  ];
+  return colors[index % colors.length];
+},
   // 폼 필드 업데이트
   updateFormFields: function() {
     const formFields = document.getElementById('formFields');
@@ -768,6 +873,16 @@ const LangGraph = {
               조건식
               <input id="nodeCondition" value="${data.condition || ''}" placeholder="예: result.success == True">
             </label>
+            <div id="branchContainer">
+              <label>브랜치</label>
+              ${(data.branches || ['true_branch', 'false_branch']).map((branch, index) => `
+                <div class="branch-item" style="display: flex; margin-bottom: 8px;">
+                  <input id="branch_${index}" value="${branch}" placeholder="브랜치 이름" style="flex: 1; margin-right: 8px;">
+                  <button type="button" onclick="LangGraph.removeBranch(${index})" style="background: #f44336; color: white;">-</button>
+                </div>
+              `).join('')}
+              <button type="button" onclick="LangGraph.addBranch()" style="width: 100%; margin-top: 8px; background: #4CAF50; color: white;">+ 브랜치 추가</button>
+            </div>
           `;
           break;
         case 'Custom':
@@ -799,7 +914,7 @@ const LangGraph = {
       // 기본 필드
       const newData = {};
       const labelInput = document.getElementById('nodeLabel');
-      if (labelInput) newData.label = labelInput.value;
+      if (labelInput) newData.label = labelInput.value || 'Unnamed Node'; // 기본값 제공
       
       // 노드 유형별 필드
       const node = this.editor.getNodeFromId(this.selectedNodeId);
@@ -807,20 +922,52 @@ const LangGraph = {
         case 'LLM':
           const modelInput = document.getElementById('nodeModel');
           const promptInput = document.getElementById('nodePrompt');
-          if (modelInput) newData.model = modelInput.value;
-          if (promptInput) newData.prompt = promptInput.value;
+          
+          // 필수 필드 검증
+          if (!modelInput?.value) {
+            this.showToast('모델 이름은 필수입니다', 'error');
+            return;
+          }
+          
+          newData.model = modelInput.value;
+          newData.prompt = promptInput?.value || '';
           break;
           
         case 'Tool':
           const toolNameInput = document.getElementById('nodeToolName');
-          const descriptionInput = document.getElementById('nodeDescription');
-          if (toolNameInput) newData.tool_name = toolNameInput.value;
-          if (descriptionInput) newData.description = descriptionInput.value;
+          
+          // 필수 필드 검증
+          if (!toolNameInput?.value) {
+            this.showToast('도구 이름은 필수입니다', 'error');
+            return;
+          }
+          
+          newData.tool_name = toolNameInput.value;
+          newData.description = document.getElementById('nodeDescription')?.value || '';
           break;
           
         case 'Condition':
           const conditionInput = document.getElementById('nodeCondition');
           if (conditionInput) newData.condition = conditionInput.value;
+          
+          // 브랜치 데이터 수집
+          const branches = [];
+          let index = 0;
+          let branchInput = document.getElementById(`branch_${index}`);
+          while (branchInput) {
+            if (branchInput.value.trim()) {
+              branches.push(branchInput.value.trim());
+            }
+            index++;
+            branchInput = document.getElementById(`branch_${index}`);
+          }
+          
+          // 최소 2개의 브랜치 보장
+          if (branches.length < 2) {
+            branches.push('true_branch', 'false_branch');
+          }
+          
+          newData.branches = branches;
           break;
           
         case 'Custom':
@@ -892,6 +1039,55 @@ const LangGraph = {
     }
   },
   
+
+  // 브랜치 추가
+  addBranch: function() {
+    const branchContainer = document.getElementById('branchContainer');
+    if (!branchContainer) return;
+    
+    const branchItems = branchContainer.querySelectorAll('.branch-item');
+    const newIndex = branchItems.length;
+    
+    const newBranchDiv = document.createElement('div');
+    newBranchDiv.className = 'branch-item';
+    newBranchDiv.style = 'display: flex; margin-bottom: 8px;';
+    newBranchDiv.innerHTML = `
+      <input id="branch_${newIndex}" placeholder="브랜치 이름" style="flex: 1; margin-right: 8px;">
+      <button type="button" onclick="LangGraph.removeBranch(${newIndex})" style="background: #f44336; color: white;">-</button>
+    `;
+    
+    // 버튼 앞에 삽입
+    const addButton = branchContainer.querySelector('button[onclick="LangGraph.addBranch()"]');
+    branchContainer.insertBefore(newBranchDiv, addButton);
+  },
+
+  // 브랜치 제거
+  removeBranch: function(index) {
+    const branchItem = document.getElementById(`branch_${index}`).parentNode;
+    if (branchItem) {
+      branchItem.remove();
+      
+      // 인덱스 재정렬
+      this.reindexBranches();
+    }
+  },
+
+  // 브랜치 인덱스 재정렬
+  reindexBranches: function() {
+    const branchContainer = document.getElementById('branchContainer');
+    if (!branchContainer) return;
+    
+    const branchItems = branchContainer.querySelectorAll('.branch-item');
+    branchItems.forEach((item, i) => {
+      const input = item.querySelector('input');
+      const button = item.querySelector('button');
+      
+      input.id = `branch_${i}`;
+      button.setAttribute('onclick', `LangGraph.removeBranch(${i})`);
+    });
+  },
+
+
   // 코드 생성
   updateCode: function() {
     try {
@@ -986,18 +1182,57 @@ const LangGraph = {
           case 'Condition':
             codeLines.push(`    # Condition 노드: ${node.data.label || 'Condition'}`);
             codeLines.push(`    def ${nodeName}_router(state):`);
-            codeLines.push(`        """${node.data.label || 'Condition'} 라우터"""`);
-            codeLines.push(`        if ${node.data.condition || 'True'}:`);
-            codeLines.push('            return "true_branch"');
-            codeLines.push('        else:');
-            codeLines.push('            return "false_branch"');
+            codeLines.push(`        """${node.data.label || 'Condition'} 라우터"""`);;
+                      
+            // 조건식 기반 분기 코드 생성
+            const branches = node.data.branches || ['true_branch', 'false_branch'];
+            const nextNodes = edges[nodeId] || [];
+            
+            if (branches.length === 2 && nextNodes.length > 0) {
+              // 기본 true/false 분기
+              codeLines.push(`        if ${node.data.condition || 'True'}:`);
+              codeLines.push(`            return "${branches[0]}"`);
+              codeLines.push('        else:');
+              codeLines.push(`            return "${branches[1]}"`);
+            } else if (branches.length > 0 && nextNodes.length > 0) {
+              // 다중 분기
+              codeLines.push('        # 조건에 따라 분기 선택');
+              codeLines.push(`        condition = ${node.data.condition || 'None'}`);
+              codeLines.push('        # 분기 결정 로직');
+              branches.forEach((branch, i) => {
+                if (i === 0) {
+                  codeLines.push(`        if condition == ${i}:`);
+                } else if (i === branches.length - 1) {
+                  codeLines.push('        else:');
+                } else {
+                  codeLines.push(`        elif condition == ${i}:`);
+                }
+                codeLines.push(`            return "${branch}"`);
+              });
+            } else {
+              codeLines.push('        # 연결된 브랜치가 없습니다');
+              codeLines.push('        return None');
+            }
+            
             codeLines.push('');
             codeLines.push(`    graph.add_conditional_edges(`);
             codeLines.push(`        "${nodeName}",`);
             codeLines.push(`        ${nodeName}_router,`);
             codeLines.push('        {');
-            codeLines.push('            "true_branch": "next_node_true",');
-            codeLines.push('            "false_branch": "next_node_false"');
+            
+            // 브랜치별 목적지 매핑 - 실제 연결 정보와 매핑
+            const branchMappings = [];
+            branches.forEach((branch, idx) => {
+              if (idx < nextNodes.length) {
+                const targetNode = graph[nextNodes[idx]];
+                if (targetNode) {
+                  const targetName = (targetNode.data.label || targetNode.name).toLowerCase().replace(/\s+/g, '_');
+                  branchMappings.push(`            "${branch}": "${targetName}"`);
+                }
+              }
+            });
+            
+            codeLines.push(branchMappings.join(',\n') || '            # No connections');
             codeLines.push('        }');
             codeLines.push('    )');
             break;
@@ -1176,6 +1411,144 @@ const LangGraph = {
     });
   },
   
+  //미리보기 실행
+  previewExecution: function() {
+  const data = this.editor.export();
+  if (!data.drawflow?.Home?.data) {
+    this.showToast('미리보기할 그래프가 없습니다', 'error');
+    return;
+  }
+  
+  const graph = data.drawflow.Home.data;
+  
+  // 시작 노드 찾기
+  let startNodeId = null;
+  Object.entries(graph).forEach(([id, node]) => {
+    if (node.name === 'Start') {
+      startNodeId = id;
+    }
+  });
+  
+  if (!startNodeId) {
+    this.showToast('시작 노드가 필요합니다', 'error');
+    return;
+  }
+  
+  // 실행 흐름 결과를 보여주는 모달 생성
+  const modal = document.createElement('div');
+  modal.className = 'modal';
+  modal.style.display = 'flex';
+  
+  const modalContent = document.createElement('div');
+  modalContent.className = 'modal-content';
+  modalContent.style.width = '80%';
+  modalContent.style.maxWidth = '800px';
+  
+  const header = document.createElement('div');
+  header.className = 'modal-header';
+  header.innerHTML = `
+    <h2>실행 흐름 미리보기</h2>
+    <button class="close-button" onclick="LangGraph.closeModal()">&times;</button>
+  `;
+  
+  const body = document.createElement('div');
+  body.className = 'modal-body';
+  body.innerHTML = '<div id="execution-preview" style="max-height: 400px; overflow-y: auto;"></div>';
+  
+  modalContent.appendChild(header);
+  modalContent.appendChild(body);
+  modal.appendChild(modalContent);
+  document.body.appendChild(modal);
+  
+  // 실행 흐름 시뮬레이션 및 표시
+  this.simulateExecution(startNodeId, graph, document.getElementById('execution-preview'));
+},
+
+simulateExecution: function(nodeId, graph, container) {
+  const visited = new Set();
+  const state = { query: "한국의 수도는 어디인가요?" };
+  
+  const simulateNode = (id, depth = 0) => {
+    if (visited.has(id)) return;
+    visited.add(id);
+    
+    const node = graph[id];
+    if (!node) return;
+    
+    const nodeDiv = document.createElement('div');
+    nodeDiv.style.marginLeft = `${depth * 20}px`;
+    nodeDiv.style.padding = '10px';
+    nodeDiv.style.marginBottom = '10px';
+    nodeDiv.style.borderLeft = '2px solid #2196F3';
+    nodeDiv.style.backgroundColor = '#f5f5f5';
+    nodeDiv.style.borderRadius = '4px';
+    
+    // 노드 메타데이터 표시
+    const nodeLabel = node.data.label || node.name;
+    nodeDiv.innerHTML = `<h4 style="margin: 0 0 10px 0;">${nodeLabel} (${node.name})</h4>`;
+    
+    // 노드 유형별 동작 시뮬레이션
+    switch (node.name) {
+      case 'Start':
+        nodeDiv.innerHTML += `<p>초기 상태: ${JSON.stringify(state)}</p>`;
+        break;
+        
+      case 'End':
+        nodeDiv.innerHTML += `<p>실행 종료, 최종 상태: ${JSON.stringify(state)}</p>`;
+        break;
+        
+      case 'LLM':
+        const response = '이는 LLM 응답의 시뮬레이션입니다. 실제 응답은 다를 수 있습니다.';
+        state.response = response;
+        nodeDiv.innerHTML += `<p>프롬프트: ${node.data.prompt || '지정되지 않음'}</p>`;
+        nodeDiv.innerHTML += `<p>응답: ${response}</p>`;
+        break;
+        
+      case 'Tool':
+        const result = `${node.data.tool_name || 'tool'} 실행 결과`;
+        state.tool_result = result;
+        nodeDiv.innerHTML += `<p>도구: ${node.data.tool_name || '지정되지 않음'}</p>`;
+        nodeDiv.innerHTML += `<p>결과: ${result}</p>`;
+        break;
+        
+      case 'Condition':
+        const condition = node.data.condition || 'True';
+        const branches = node.data.branches || ['true_branch', 'false_branch'];
+        nodeDiv.innerHTML += `<p>조건식: ${condition}</p>`;
+        nodeDiv.innerHTML += `<p>선택된 브랜치: ${branches[0]}</p>`;
+        break;
+        
+      case 'Output':
+        nodeDiv.innerHTML += `<p>출력: ${state.response || state.tool_result || '결과 없음'}</p>`;
+        break;
+        
+      case 'Custom':
+        nodeDiv.innerHTML += `<p>사용자 정의 코드 실행</p>`;
+        nodeDiv.innerHTML += `<pre style="background: #f0f0f0; padding: 5px;">${node.data.code || '# 코드 없음'}</pre>`;
+        break;
+    }
+    
+    container.appendChild(nodeDiv);
+    
+    // 다음 노드 처리
+    const outputs = node.outputs?.output_1?.connections || [];
+    
+    // Condition 노드의 경우 첫 번째 분기만 시뮬레이션
+    if (node.name === 'Condition' && outputs.length > 0) {
+      const nextNode = outputs[0].node;
+      simulateNode(nextNode, depth + 1);
+    } else {
+      // 일반 노드는 모든 연결 시뮬레이션
+      outputs.forEach(conn => {
+        simulateNode(conn.node, depth + 1);
+      });
+    }
+  };
+  
+  simulateNode(nodeId);
+},
+
+
   // 알림 표시
   showToast: function(message, type = 'info') {
     const bgColors = {
@@ -1211,10 +1584,14 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 });
 
+
 // 전역 함수 노출
 window.exportJson = function() { LangGraph.exportJson(); };
 window.copyCode = function() { LangGraph.copyCode(); };
 window.closeModal = function() { LangGraph.closeModal(); };
+window.previewExecution = function() {LangGraph.previewExecution(); };
+
+
 </script>
 
 </body>
