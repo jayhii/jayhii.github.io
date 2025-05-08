@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
-  <title>LangGraph 노드 에디터</title>
+  <title>Easy-Agent 에디터</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
   <!-- 외부 라이브러리 -->
@@ -562,7 +562,7 @@
     <div class="header-container">
       <a href="index.html" class="logo">
         <span class="logo-icon">🔄</span>
-        LangGraph
+        EasyAgent
       </a>
       
       <div class="page-title">노드 에디터</div>
@@ -585,7 +585,7 @@
   <div class="workspace-container">
     <!-- 사이드바 -->
     <div class="sidebar">
-      <h3>LangGraph 블록</h3>
+      <h3>Node 블록</h3>
       <div id="nodeButtons">
         <button data-type="Start" title="그래프 시작점">Start</button>
         <button data-type="End" title="그래프 종료점">End</button>
@@ -643,7 +643,7 @@
   <footer>
     <div class="footer-container">
       <div class="copyright">
-        &copy; 2025 LangGraph. All rights reserved.
+        &copy; 2025 EasyGen. All rights reserved.
       </div>
       <div class="footer-links">
         <a href="index.html">홈</a>
@@ -661,7 +661,7 @@
 <div id="helpModal" class="modal">
   <div class="modal-content">
     <div class="modal-header">
-      <h2>LangGraph 노드 에디터 도움말</h2>
+      <h2>EasyAgent 노드 에디터 도움말</h2>
       <button class="close-button" onclick="closeModal()">&times;</button>
     </div>
     <div class="modal-body">
@@ -761,7 +761,7 @@ const LangGraph = {
     this.initKeyboardShortcuts();
     
     // 사용자에게 알림 표시
-    this.showToast('LangGraph 노드 에디터가 준비되었습니다', 'success');
+    this.showToast('블록 에디터가 준비되었습니다', 'success');
   },
   
   // 이벤트 리스너 등록
