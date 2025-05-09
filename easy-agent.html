@@ -202,16 +202,25 @@
     }
     
     .code-viewer-content, .code-viewer-edit {
-      flex: 1;
       padding: 1rem;
-      overflow-y: auto;
+      
     }
-    
+
+    .code-viewer-content {
+      flex: none; 
+      height: 500px;
+      display: flex;
+      flex-direction: column;
+    }    
+
     .code-viewer-edit {
+      flex: none; 
+      height: 420px; 
       background: #fff;
       border-top: 1px solid var(--border-color);
+      overflow-y: auto;
     }
-    
+
     .code-viewer-edit h4 { 
       margin-top: 0; 
       color: var(--primary-dark);
@@ -298,16 +307,23 @@
     }
     
     pre {
+      flex: 1;
+      max-height: 100%;
       background: #f8f8f8;
       padding: 1rem;
       border-radius: 6px;
       border: 1px solid #e0e0e0;
       white-space: pre-wrap;
       overflow-x: auto;
+      overflow-y: auto;
       margin: 0;
     }
 
     /* 노드 스타일 */
+    .drawflow {
+      width: 70%;      
+    }
+
     .drawflow .drawflow-node {
       background: white;
       border: 1px solid var(--border-color);
@@ -762,6 +778,12 @@ const LangGraph = {
     
     // 사용자에게 알림 표시
     this.showToast('블록 에디터가 준비되었습니다', 'success');
+
+    // 줌 버튼 이벤트 리스너 등록
+    document.getElementById('zoom-in').addEventListener('click', () => LangGraph.handleZoom('in'));
+    document.getElementById('zoom-out').addEventListener('click', () => LangGraph.handleZoom('out'));
+    document.getElementById('zoom-reset').addEventListener('click', () => LangGraph.handleZoom('reset'));
+
   },
   
   // 이벤트 리스너 등록
@@ -864,7 +886,6 @@ const LangGraph = {
   // 노드 추가
   addNode: function(type) {
     try {
-      // 노드 위치 계산 (가시 영역 내에 배치)
       const editor = document.getElementById('drawflow');
       const posX = 100 + (this.nodeCount % 3) * 250;
       const posY = 100 + Math.floor(this.nodeCount / 3) * 150;
@@ -873,29 +894,36 @@ const LangGraph = {
       if (!template) {
         throw new Error(`알 수 없는 노드 유형: ${type}`);
       }
+
+      let numInputs = 1;
+      let numOutputs = 1;
+
+      // Condition 노드일 경우, 브랜치 수만큼 출력 커넥터 수를 설정
+      if (type === 'Condition') {
+        numOutputs = template.data.branches ? template.data.branches.length : 2; // 기본값 2 (true/false)
+        // Condition 노드는 일반적으로 하나의 입력을 받음
+      }
       
-      // 노드 ID 생성
       const nodeId = this.editor.addNode(
         type,
-        1, // 입력 커넥터 수
-        1, // 출력 커넥터 수 
+        numInputs, 
+        numOutputs, // 수정된 출력 커넥터 수
         posX,
         posY,
         type,
-        { ...template.data, label: template.label },
+        { ...template.data, label: template.label }, // 데이터 복사 시 깊은 복사 고려
         template.html
       );
       
-      // 노드 클래스 추가 (스타일링 용도)
       setTimeout(() => {
         const nodeElement = document.querySelector(`.drawflow-node[data-id="${nodeId}"]`);
         if (nodeElement) {
           nodeElement.classList.add(type);
         }
-      }, 10);
+      }, 10); // DOM 업데이트 후 클래스 추가
       
       this.nodeCount++;
-      this.updateCode();
+      this.updateCode(); // 코드 즉시 업데이트
       this.showToast(`${type} 노드가 추가되었습니다`, 'success');
       
       return nodeId;
@@ -973,41 +1001,67 @@ const LangGraph = {
     this.updateCode();
   },
   
-  // 줌 핸들러
-  handleZoom: function() {
-    // 줌 이벤트 처리
+  handleZoom: function(zoomType) {
+    const editorElement = document.getElementById('drawflow');
+    const currentZoom = this.editor.zoom_value;
+
+    if (zoomType === 'in' && currentZoom < this.editor.zoom_max) {
+      this.editor.zoom_in();
+    } else if (zoomType === 'out' && currentZoom > this.editor.zoom_min) {
+      this.editor.zoom_out();
+    } else if (zoomType === 'reset') {
+      this.editor.zoom_reset();
+    }
+
+    // 줌 상태 업데이트
+    document.getElementById('zoom-percentage').textContent = `${Math.round(this.editor.zoom_value * 100)}%`;
+
+
   },
   
+
+
   // 연결 스타일 업데이트
   updateConnectionStyle: function(connection) {
     try {
-      const { input_id, output_id } = connection;
+      // output_class는 'output_1', 'output_2' 등의 값을 가집니다.
+      const { input_id, output_id, output_class, input_class } = connection; 
       
-      // 조건 노드에서 나오는 연결선 스타일 적용
       setTimeout(() => {
         const sourceNode = this.editor.getNodeFromId(output_id);
-        const connections = document.querySelectorAll(`.connection.node_in_${input_id}.node_out_${output_id}`);
         
-        connections.forEach(conn => {
-          if (sourceNode?.name === 'Condition') {
-            conn.classList.add('condition-connection');
-            
-            // 브랜치별 다른 색상 스타일 적용
-            const sourceNodeData = sourceNode.data;
-            const branches = sourceNodeData?.branches || ['true_branch', 'false_branch'];
-            const connectionIndex = Array.from(
-              document.querySelectorAll(`.connection.node_out_${output_id}`)
-            ).indexOf(conn);
-            
-            if (connectionIndex >= 0 && connectionIndex < branches.length) {
-              // 브랜치별 다른 스타일 적용
-              conn.style.setProperty('--branch-color', this.getBranchColor(connectionIndex));
-            }
+        // Drawflow 연결 요소를 정확히 선택합니다.
+        // 클래스 이름은 Drawflow 버전에 따라 다를 수 있으므로 확인이 필요할 수 있습니다.
+        const connElement = document.querySelector(
+            `.connection.node_in_${input_id}.node_out_${output_id}.${output_class}.input_${input_class}`
+        );
+
+        if (connElement && sourceNode?.name === 'Condition') {
+          connElement.classList.add('condition-connection');
+          
+          const sourceNodeData = sourceNode.data;
+          // sourceNodeData.branches가 정의되지 않았거나 배열이 아닌 경우를 대비하여 기본값 설정
+          const branches = Array.isArray(sourceNodeData?.branches) ? sourceNodeData.branches : [];
+          
+          // output_class (예: "output_1") 에서 브랜치 인덱스 (0-based) 추출
+          let branchIndex = -1;
+          if (output_class && output_class.startsWith('output_')) {
+              branchIndex = parseInt(output_class.split('_')[1], 10) - 1;
           }
-        });
-      }, 100);
+            
+          if (branchIndex >= 0 && branchIndex < branches.length) {
+            // getBranchColor 함수를 사용하여 브랜치별 색상 적용
+            connElement.style.setProperty('--branch-color', this.getBranchColor(branchIndex));
+          } else {
+            // 매칭되는 브랜치가 없거나 인덱스가 잘못된 경우 기본 색상 적용
+            connElement.style.setProperty('--branch-color', this.getBranchColor(0)); // 또는 다른 기본값
+          }
+        }
+      }, 100); // DOM 요소가 완전히 그려진 후 스타일을 적용하기 위한 지연
     } catch (error) {
       console.error('연결 스타일 업데이트 오류:', error);
+      // 사용자에게 오류를 알리는 토스트 메시지를 추가할 수 있습니다.
+      // this.showToast('연결 스타일 업데이트 중 오류 발생', 'error');
     }
   },
 
@@ -1385,59 +1439,132 @@ getBranchColor: function(index) {
             break;
             
           case 'Condition':
+            const conditionLogic = node.data.condition || 'True'; // UI에서 입력된 조건
+            const branches = Array.isArray(node.data.branches) && node.data.branches.length > 0 
+                             ? node.data.branches 
+                             : ['true_branch', 'false_branch']; // UI에서 정의된 브랜치 또는 기본값
+
             codeLines.push(`    # Condition 노드: ${node.data.label || 'Condition'}`);
-            codeLines.push(`    def ${nodeName}_router(state):`);
-            codeLines.push(`        """${node.data.label || 'Condition'} 라우터"""`);;
-                      
-            // 조건식 기반 분기 코드 생성
-            const branches = node.data.branches || ['true_branch', 'false_branch'];
-            const nextNodes = edges[nodeId] || [];
-            
-            if (branches.length === 2 && nextNodes.length > 0) {
-              // 기본 true/false 분기
-              codeLines.push(`        if ${node.data.condition || 'True'}:`);
-              codeLines.push(`            return "${branches[0]}"`);
-              codeLines.push('        else:');
-              codeLines.push(`            return "${branches[1]}"`);
-            } else if (branches.length > 0 && nextNodes.length > 0) {
-              // 다중 분기
-              codeLines.push('        # 조건에 따라 분기 선택');
-              codeLines.push(`        condition = ${node.data.condition || 'None'}`);
-              codeLines.push('        # 분기 결정 로직');
-              branches.forEach((branch, i) => {
-                if (i === 0) {
-                  codeLines.push(`        if condition == ${i}:`);
-                } else if (i === branches.length - 1) {
-                  codeLines.push('        else:');
-                } else {
-                  codeLines.push(`        elif condition == ${i}:`);
-                }
-                codeLines.push(`            return "${branch}"`);
-              });
-            } else {
-              codeLines.push('        # 연결된 브랜치가 없습니다');
-              codeLines.push('        return None');
-            }
-            
+
+            // 1. Condition 노드 자체의 메인 로직 함수 정의
+            codeLines.push(`    def ${nodeName}_main_logic(state):`);
+            codeLines.push(`        """'${node.data.label || 'Condition'}' 노드의 메인 로직입니다."""`);
+            codeLines.push(`        # 라우팅 전에 실행되어야 하는 로직을 여기에 추가할 수 있습니다.`);
+            codeLines.push(`        # 예를 들어, 상태(state)를 변경하거나 라우팅 결정에 필요한 값을 준비합니다.`);
+            codeLines.push(`        print(f"--- 노드 실행: ${nodeName} (${node.data.label || 'Condition'}) ---")`);
+            codeLines.push(`        return state`); // 기본적으로 상태를 그대로 반환
             codeLines.push('');
+            codeLines.push(`    graph.add_node("${nodeName}", ${nodeName}_main_logic)`);
+            codeLines.push('');
+
+            // 2. 라우터 함수 정의
+            codeLines.push(`    def ${nodeName}_router(state):`);
+            codeLines.push(`        """'${node.data.label || 'Condition'}' 노드의 라우터 함수입니다.""`);
+            codeLines.push(`        # UI에서 설정된 조건: ${conditionLogic}`);
+            codeLines.push(`        # 이 라우터는 다음 브랜치 이름 중 하나를 반환해야 합니다:`);
+            codeLines.push(`        # ${branches.map(b => `"${b}"`).join(', ')}`);
+            
+            if (branches.length === 0) {
+                codeLines.push('        # 경고: 정의된 브랜치가 없습니다. 기본적으로 END로 라우팅합니다.');
+                codeLines.push('        return END');
+            } else if (branches.length === 1) {
+                codeLines.push(`        # 단일 브랜치: "${branches[0]}"가 정의되어 있습니다.`);
+                codeLines.push(`        # 조건 (${conditionLogic}) 평가 결과와 관계없이 항상 "${branches[0]}" 브랜치로 라우팅합니다.`);
+                codeLines.push(`        print(f"--- 라우터 (${nodeName}): 단일 브랜치 '${branches[0]}'로 라우팅 ---")`);
+                codeLines.push(`        return "${branches[0]}"`);
+            } else { // 2개 이상의 브랜치가 있는 경우
+                codeLines.push(`        evaluated_condition = ${conditionLogic}`);
+                codeLines.push(`        print(f"--- 라우터 (${nodeName}): 조건 \\"${conditionLogic}\\" 평가 결과: {evaluated_condition} ---")`);
+                codeLines.push(`        if evaluated_condition:`);
+                codeLines.push(`            print(f"--- 라우터 (${nodeName}): 조건 TRUE, 브랜치 '${branches[0]}'로 라우팅 ---")`);
+                codeLines.push(`            return "${branches[0]}"`); // 조건이 참일 때 첫 번째 브랜치
+                codeLines.push(`        else:`);
+                codeLines.push(`            print(f"--- 라우터 (${nodeName}): 조건 FALSE, 브랜치 '${branches[1]}'로 라우팅 ---")`);
+                codeLines.push(`            return "${branches[1]}"`); // 조건이 거짓일 때 두 번째 브랜치
+                
+                if (branches.length > 2) {
+                    codeLines.push('');
+                    codeLines.push(`        # 중요: 현재 자동 생성된 라우팅 로직은 위에서 정의된`);
+                    codeLines.push(`        # 두 개의 브랜치('${branches[0]}' 또는 '${branches[1]}')만 처리합니다.`);
+                    codeLines.push(`        # 나머지 브랜치(${branches.slice(2).map(b => `"${b}"`).join(', ')})로 라우팅하려면,`);
+                    codeLines.push(`        # 아래 주석 처리된 예시처럼 이 라우터 함수의 로직을 직접 수정해야 합니다.`);
+                    codeLines.push(`        # 예를 들어, state의 다른 값을 확인하여 특정 추가 브랜치로 보낼 수 있습니다.`);
+                    codeLines.push(`        #`);
+                    codeLines.push(`        # 예시 (수정 필요):`);
+                    codeLines.push(`        # next_step = state.get("custom_routing_key", None)`);
+                    codeLines.push(`        # if evaluated_condition:`);
+                    codeLines.push(`        #     if next_step == "option_for_true_branch_variant":`);
+                    codeLines.push(`        #         return "${branches[0]}" # 또는 다른 브랜치`);
+                    codeLines.push(`        #     return "${branches[0]}"`);
+                    codeLines.push(`        # else:`);
+                    codeLines.push(`        #     if next_step == "${branches[2]}": # branches[2]가 실제 브랜치 이름이라고 가정`);
+                    codeLines.push(`        #         return "${branches[2]}"`);
+                    codeLines.push(`        #     elif next_step == "${branches[3]}": # branches[3]이 실제 브랜치 이름이라고 가정`);
+                    codeLines.push(`        #         return "${branches[3]}"`);
+                    codeLines.push(`        #     return "${branches[1]}"`);
+                    codeLines.push(`        #`);
+                    codeLines.push(`        # 또는, 모든 조건을 명시적으로 처리:`);
+                    codeLines.push(`        # if condition_for_branch_0: return "${branches[0]}"`);
+                    codeLines.push(`        # elif condition_for_branch_1: return "${branches[1]}"`);
+                    branches.slice(2).forEach(branch => {
+                    codeLines.push(`        # elif condition_for_${branch.replace(/[^a-zA-Z0-9_]/g, '')}: return "${branch}"`);
+                    });
+                    codeLines.push(`        # else: return "default_branch_or_END"`);
+                }
+            }
+            codeLines.push('');
+
+            // 3. 조건부 엣지(연결) 추가
             codeLines.push(`    graph.add_conditional_edges(`);
-            codeLines.push(`        "${nodeName}",`);
-            codeLines.push(`        ${nodeName}_router,`);
+            codeLines.push(`        "${nodeName}",`); // 소스 노드 이름
+            codeLines.push(`        ${nodeName}_router,`); // 라우터 함수
             codeLines.push('        {');
             
-            // 브랜치별 목적지 매핑 - 실제 연결 정보와 매핑
-            const branchMappings = [];
-            branches.forEach((branch, idx) => {
-              if (idx < nextNodes.length) {
-                const targetNode = graph[nextNodes[idx]];
-                if (targetNode) {
-                  const targetName = (targetNode.data.label || targetNode.name).toLowerCase().replace(/\s+/g, '_');
-                  branchMappings.push(`            "${branch}": "${targetName}"`);
+            const branchToTargetMap = {};
+            if (node.outputs) {
+                for (const outputKey in node.outputs) {
+                    if (node.outputs.hasOwnProperty(outputKey) && outputKey.startsWith('output_')) {
+                        const outputIndex = parseInt(outputKey.split('_')[1], 10) - 1; // 0-indexed
+                        
+                        if (outputIndex >= 0 && outputIndex < branches.length) {
+                            const branchName = branches[outputIndex];
+                            const connectionsToThisBranch = node.outputs[outputKey].connections;
+                            
+                            if (connectionsToThisBranch && connectionsToThisBranch.length > 0) {
+                                const targetNodeId = connectionsToThisBranch[0].node;
+                                const targetNodeData = graph[targetNodeId];
+                                
+                                if (targetNodeData) {
+                                    const targetName = (targetNodeData.data.label || targetNodeData.name).toLowerCase().replace(/\s+/g, '_');
+                                    branchToTargetMap[branchName] = targetName;
+                                } else {
+                                     branchToTargetMap[branchName] = "END";
+                                     console.warn(`Condition node ${nodeName}, branch ${branchName} is connected to a non-existing node ID ${targetNodeId}. Defaulting to END.`);
+                                }
+                            } else {
+                                branchToTargetMap[branchName] = "END"; 
+                                codeLines.push(`            # 경고: '${branchName}' 브랜치에 연결된 노드가 없습니다. '${branchName}': "END"로 자동 매핑됩니다.`);
+                            }
+                        }
+                    }
                 }
-              }
+            }
+            // UI에서 정의했지만, 시각적으로 연결되지 않은 브랜치도 END로 매핑 (또는 다른 기본값)
+            branches.forEach(branchName => {
+                if (!branchToTargetMap.hasOwnProperty(branchName)) {
+                    branchToTargetMap[branchName] = "END";
+                    codeLines.push(`            # 정보: '${branchName}' 브랜치는 UI에 정의되었으나, 연결되지 않아 '${branchName}': "END"로 자동 매핑됩니다.`);
+                }
             });
-            
-            codeLines.push(branchMappings.join(',\n') || '            # No connections');
+
+            const branchMappingLines = Object.entries(branchToTargetMap)
+                .map(([branch, target]) => `            "${branch}": "${target}"`);
+
+            if (branchMappingLines.length > 0) {
+                codeLines.push(branchMappingLines.join(',\n'));
+            } else {
+                codeLines.push('            # 매핑된 브랜치 연결이 없습니다. 모든 경로는 END로 이어질 수 있습니다.');
+            }
             codeLines.push('        }');
             codeLines.push('    )');
             break;
@@ -1716,11 +1843,30 @@ simulateExecution: function(nodeId, graph, container) {
         nodeDiv.innerHTML += `<p>결과: ${result}</p>`;
         break;
         
-      case 'Condition':
+        case 'Condition':
         const condition = node.data.condition || 'True';
         const branches = node.data.branches || ['true_branch', 'false_branch'];
+        const actualConnections = node.outputs?.output_1?.connections || [];
+        let simulatedBranch = 'N/A';
+        if (actualConnections.length > 0) {
+            // 실제 연결된 노드가 있다면, 그 중 첫번째 브랜치를 시뮬레이션 대상으로 가정
+            // Drawflow의 내부 ID와 우리가 정의한 branch 이름 간의 매핑이 필요할 수 있음
+            // 여기서는 단순히 첫 번째 연결된 브랜치의 이름을 사용한다고 가정
+            const firstConnectedNodeId = actualConnections[0].node;
+            const firstConnectedNode = graph[firstConnectedNodeId];
+            if (firstConnectedNode) {
+                // Condition 노드의 branches 배열에서 실제 연결과 매칭되는 이름을 찾아야 할 수 있습니다.
+                // 지금은 단순화를 위해 첫 번째 정의된 브랜치 이름을 사용합니다.
+                simulatedBranch = branches[0];
+            }
+        }
+
         nodeDiv.innerHTML += `<p>조건식: ${condition}</p>`;
-        nodeDiv.innerHTML += `<p>선택된 브랜치: ${branches[0]}</p>`;
+        if (actualConnections.length > 0) {
+            nodeDiv.innerHTML += `<p>시뮬레이션된 브랜치: ${simulatedBranch} (미리보기는 첫 번째 유효 경로를 따릅니다)</p>`;
+        } else {
+            nodeDiv.innerHTML += `<p>연결된 브랜치가 없어 시뮬레이션 경로를 결정할 수 없습니다.</p>`;
+        }
         break;
         
       case 'Output':
@@ -1738,14 +1884,23 @@ simulateExecution: function(nodeId, graph, container) {
     // 다음 노드 처리
     const outputs = node.outputs?.output_1?.connections || [];
     
-    // Condition 노드의 경우 첫 번째 분기만 시뮬레이션
-    if (node.name === 'Condition' && outputs.length > 0) {
-      const nextNode = outputs[0].node;
-      simulateNode(nextNode, depth + 1);
+    if (node.name === 'Condition') {
+      if (outputs.length > 0) {
+        // Condition 노드의 경우, 미리보기에서는 첫 번째 유효한 연결을 따라 시뮬레이션합니다.
+        const nextNodeId = outputs[0].node;
+        container.appendChild(document.createComment(` Condition: Simulating path to node ${nextNodeId} `));
+        simulateNode(nextNodeId, graph, container, depth + 1); // graph와 container를 전달
+      } else {
+        const noBranchMsg = document.createElement('p');
+        noBranchMsg.textContent = '알림: 이 조건 노드에 연결된 실행 경로가 없습니다.';
+        noBranchMsg.style.fontStyle = 'italic';
+        noBranchMsg.style.color = '#757575';
+        nodeDiv.appendChild(noBranchMsg); // nodeDiv는 현재 노드의 div입니다.
+      }
     } else {
-      // 일반 노드는 모든 연결 시뮬레이션
+      // 일반 노드는 모든 출력 연결 시뮬레이션
       outputs.forEach(conn => {
-        simulateNode(conn.node, depth + 1);
+        simulateNode(conn.node, graph, container, depth + 1); // graph와 container를 전달
       });
     }
   };
@@ -1798,6 +1953,5 @@ window.previewExecution = function() {LangGraph.previewExecution(); };
 
 
 </script>
-
 </body>
 </html>
