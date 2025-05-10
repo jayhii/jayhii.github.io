@@ -187,8 +187,17 @@
     .editor-background {
       width: 100%;
       height: 100%;
+      position: relative;
       background-image: radial-gradient(#ddd 1px, transparent 1px);
       background-size: 20px 20px;
+      overflow: hidden;
+    }
+
+    .drawflow {
+      width: 100%;
+      height: 100%;
+      position: absolute;
+      top: 0; left: 0;
     }
 
     /* 코드 뷰어 */
@@ -208,7 +217,7 @@
 
     .code-viewer-content {
       flex: none; 
-      height: 500px;
+      height: 50%;
       display: flex;
       flex-direction: column;
     }    
@@ -320,10 +329,6 @@
     }
 
     /* 노드 스타일 */
-    .drawflow {
-      width: 70%;      
-    }
-
     .drawflow .drawflow-node {
       background: white;
       border: 1px solid var(--border-color);
@@ -529,6 +534,43 @@
       color: white;
     }
 
+    .zoom-controls {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      background: white;
+      border: 1px solid var(--border-color);
+      box-shadow: 0 2px 8px var(--shadow-color);
+      border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      padding: 8px;
+      z-index: 20;
+    }
+
+    .zoom-controls button {
+      background: var(--primary-color);
+      color: white;
+      border: none;
+      border-radius: 4px;
+      font-size: 1.2rem;
+      padding: 6px 10px;
+      cursor: pointer;
+      transition: background-color 0.3s;
+    }
+
+    .zoom-controls button:hover {
+      background: var(--primary-dark);
+    }
+
+    #zoom-percentage {
+      text-align: center;
+      font-size: 0.9rem;
+      margin-top: 5px;
+      color: #555;
+    }
+
     /* 반응형 디자인 */
     @media (max-width: 1200px) {
       .workspace-container {
@@ -628,8 +670,15 @@
 
     <!-- 에디터 -->
     <div class="editor-container">
-      <div id="drawflow" class="editor-background"></div>
-      
+      <div class="editor-background">
+        <div id="drawflow" class="drawflow"></div>
+      </div>
+      <div class="zoom-controls">
+        <button id="zoom-in" title="확대">＋</button>
+        <button id="zoom-out" title="축소">－</button>
+        <button id="zoom-reset" title="리셋">⟳</button>
+        <div id="zoom-percentage">100%</div>
+      </div>
       <!-- 툴팁 -->
       <div id="tooltip" class="tooltip"></div>
     </div>
@@ -764,7 +813,7 @@ const LangGraph = {
     this.editor.editor_mode = 'edit';
     this.editor.zoom_enable = true;
     this.editor.zoom_value = 1;
-    this.editor.zoom_max = 1.6;
+    this.editor.zoom_max = 2.5;
     this.editor.zoom_min = 0.5;
     
     // 이벤트 리스너 등록
@@ -1001,25 +1050,34 @@ const LangGraph = {
     this.updateCode();
   },
   
-  handleZoom: function(zoomType) {
-    const editorElement = document.getElementById('drawflow');
-    const currentZoom = this.editor.zoom_value;
+handleZoom: function(zoomType) {
+    const drawflowCanvas = document.querySelector('.drawflow');
+    let currentZoom = this.editor.zoom_value; // 수정 가능하게 let으로!
 
-    if (zoomType === 'in' && currentZoom < this.editor.zoom_max) {
-      this.editor.zoom_in();
-    } else if (zoomType === 'out' && currentZoom > this.editor.zoom_min) {
-      this.editor.zoom_out();
+    const zoomStep = 0.1; // 확대/축소 단위 설정
+
+    if (zoomType === 'in') {
+      if (currentZoom + zoomStep <= this.editor.zoom_max) {
+        currentZoom += zoomStep;
+      }
+    } else if (zoomType === 'out') {
+      if (currentZoom - zoomStep >= this.editor.zoom_min) {
+        currentZoom -= zoomStep;
+      }
     } else if (zoomType === 'reset') {
-      this.editor.zoom_reset();
+      currentZoom = 1;
     }
 
-    // 줌 상태 업데이트
-    document.getElementById('zoom-percentage').textContent = `${Math.round(this.editor.zoom_value * 100)}%`;
+    // editor zoom_value 직접 업데이트
+    this.editor.zoom_value = currentZoom;
 
+    // drawflow 캔버스에만 transform: scale 적용
+    drawflowCanvas.style.transform = `scale(${currentZoom})`;
+    drawflowCanvas.style.transformOrigin = "0 0"; // 기준점은 왼쪽 위
 
-  },
-  
-
+    // 화면에 현재 줌 퍼센트 표시
+    document.getElementById('zoom-percentage').textContent = `${Math.round(currentZoom * 100)}%`;
+},
 
   // 연결 스타일 업데이트
   updateConnectionStyle: function(connection) {
